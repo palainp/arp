@@ -69,7 +69,7 @@ let check_response expected buf =
 
 let check_ethif_response expected buf =
   let open Ethernet.Packet in
-  match of_cstruct buf with
+  match of_bytes buf with
   | Error s -> Alcotest.fail s
   | Ok ({ethertype; _}, arp) ->
     match ethertype with
@@ -87,12 +87,13 @@ let garp source_mac source_ip =
   }
 
 let fail_on_receipt netif buf =
+  let str = Bytes.to_string buf in
   Alcotest.fail (Format.asprintf "received traffic when none was expected on interface %a: %a"
-	  Macaddr.pp (V.mac netif) Cstruct.hexdump_pp buf)
+	  Macaddr.pp (V.mac netif) Ohex.pp str)
 
 let single_check netif expected =
   V.listen netif ~header_size (fun buf ->
-      match Ethernet.Packet.of_cstruct buf with
+      match Ethernet.Packet.of_bytes buf with
       | Error _ -> failwith "sad face"
       | Ok (_, payload) ->
         check_response expected payload; V.disconnect netif) >|= fun _ -> ()
@@ -241,7 +242,8 @@ let input_single_garp () =
   (* set the IP on speak_arp, which should cause a GARP to be emitted which
      listen_arp will hear and cache. *)
   let one_and_done buf =
-    let arpbuf = Cstruct.shift buf 14 in
+    let len = Bytes.length buf in
+    let arpbuf = Bytes.sub buf 14 (len-14) in
     A.input listen.arp arpbuf >>= fun () ->
     V.disconnect listen.netif
   in
@@ -456,7 +458,7 @@ let nonsense_requests () =
 	target_mac = Macaddr.broadcast;
 	source_ip = inquirer_ip;
 	target_ip = answerer_ip } arp ;
-    Cstruct.BE.set_uint16 arp 6 number;
+    Bytes.set_uint16_be arp 6 number;
     Arp_packet.size
   in
   let requests = List.map request [0; 3; -1; 255; 256; 257; 65536] in

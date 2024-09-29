@@ -37,7 +37,7 @@ let equal a b =
 type error =
   | Too_short
   | Unusable
-  | Unknown_operation of Cstruct.uint16
+  | Unknown_operation of int
 
 let[@coverage off] pp fmt t =
   if t.operation = Request then
@@ -68,23 +68,23 @@ let (>>=) x f = match x with
   | Error e -> Error e
 
 let decode buf =
-  let check_len buf = Cstruct.length buf >= size in
+  let check_len buf = Bytes.length buf >= size in
   let check_hdr buf =
-    Cstruct.BE.get_uint16 buf 0 = ether_htype &&
-    Cstruct.BE.get_uint16 buf 2 = ipv4_ethertype &&
-    Cstruct.get_uint8 buf 4 = ether_size &&
-    Cstruct.get_uint8 buf 5 = ipv4_size
+    Bytes.get_uint16_be buf 0 = ether_htype &&
+    Bytes.get_uint16_be buf 2 = ipv4_ethertype &&
+    Bytes.get_uint8 buf 4 = ether_size &&
+    Bytes.get_uint8 buf 5 = ipv4_size
   in
   guard (check_len buf) Too_short >>= fun () ->
   guard (check_hdr buf) Unusable >>= fun () ->
-  let op = Cstruct.BE.get_uint16 buf 6 in
+  let op = Bytes.get_uint16_be buf 6 in
   match int_to_op op with
   | None -> Error (Unknown_operation op)
   | Some operation ->
-    let source_mac = Macaddr.of_octets_exn (Cstruct.to_string (Cstruct.sub buf 8 6))
-    and target_mac = Macaddr.of_octets_exn (Cstruct.to_string (Cstruct.sub buf 18 6))
-    and source_ip = Ipaddr.V4.of_int32 (Cstruct.BE.get_uint32 buf 14)
-    and target_ip = Ipaddr.V4.of_int32 (Cstruct.BE.get_uint32 buf 24) in
+    let source_mac = Macaddr.of_octets_exn (Bytes.to_string (Bytes.sub buf 8 6))
+    and target_mac = Macaddr.of_octets_exn (Bytes.to_string (Bytes.sub buf 18 6))
+    and source_ip = Ipaddr.V4.of_int32 (Bytes.get_int32_be buf 14)
+    and target_ip = Ipaddr.V4.of_int32 (Bytes.get_int32_be buf 24) in
     Ok {
       operation ;
       source_mac; source_ip ;
@@ -92,23 +92,23 @@ let decode buf =
     }
 
 let hdr =
-  let buf = Cstruct.create 6 in
-  Cstruct.BE.set_uint16 buf 0 ether_htype;
-  Cstruct.BE.set_uint16 buf 2 ipv4_ethertype;
-  Cstruct.set_uint8 buf 4 ether_size;
-  Cstruct.set_uint8 buf 5 ipv4_size;
+  let buf = Bytes.create 6 in
+  Bytes.set_uint16_be buf 0 ether_htype;
+  Bytes.set_uint16_be buf 2 ipv4_ethertype;
+  Bytes.set_uint8 buf 4 ether_size;
+  Bytes.set_uint8 buf 5 ipv4_size;
   buf
 
 let encode_into t buf =
-  Cstruct.blit hdr 0 buf 0 6 ;
-  Cstruct.BE.set_uint16 buf 6 (op_to_int t.operation) ;
-  Cstruct.blit_from_string (Macaddr.to_octets t.source_mac) 0 buf 8 6 ;
-  Cstruct.BE.set_uint32 buf 14 (Ipaddr.V4.to_int32 t.source_ip) ;
-  Cstruct.blit_from_string (Macaddr.to_octets t.target_mac) 0 buf 18 6 ;
-  Cstruct.BE.set_uint32 buf 24 (Ipaddr.V4.to_int32 t.target_ip)
+  Bytes.blit hdr 0 buf 0 6 ;
+  Bytes.set_uint16_be buf 6 (op_to_int t.operation) ;
+  Bytes.blit_string (Macaddr.to_octets t.source_mac) 0 buf 8 6 ;
+  Bytes.set_int32_be buf 14 (Ipaddr.V4.to_int32 t.source_ip) ;
+  Bytes.blit_string (Macaddr.to_octets t.target_mac) 0 buf 18 6 ;
+  Bytes.set_int32_be buf 24 (Ipaddr.V4.to_int32 t.target_ip)
   [@@inline]
 
 let encode t =
-  let buf = Cstruct.create_unsafe size in
+  let buf = Bytes.create size in
   encode_into t buf;
   buf

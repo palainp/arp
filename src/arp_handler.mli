@@ -99,7 +99,7 @@ val tick : 'a t -> 'a t * (Arp_packet.t * Macaddr.t) list * 'a list
     state [t].  The state is transformed into [t'].  If it was an ARP request
     for one of our IPv4 addresses, an ARP reply should be send out [reply].  If
     the input was an awaited ARP reply, some elements [w] can be informed.  *)
-val input : 'a t -> Cstruct.t ->
+val input : 'a t -> Bytes.t ->
   ('a t * (Arp_packet.t * Macaddr.t) option * (Macaddr.t * 'a) option)
 
 (** The type returned by query, either a [Mac] and a mac address, or [Wait] for

@@ -61,7 +61,7 @@ module type S = sig
   (** [input arp frame] will handle an ARP frame. If it is a response,
       it will update its cache, otherwise will try to satisfy the
       request. *)
-  val input : t -> Cstruct.t -> unit Lwt.t
+  val input : t -> Bytes.t -> unit Lwt.t
 end
 
 

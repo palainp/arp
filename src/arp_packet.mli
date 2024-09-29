@@ -39,7 +39,7 @@ val equal : t -> t -> bool
 type error =
   | Too_short
   | Unusable
-  | Unknown_operation of Cstruct.uint16
+  | Unknown_operation of int
 
 (** [pp_error ppf err] prints the error [err] on [ppf]. *)
 val pp_error : Format.formatter -> error -> unit
@@ -47,15 +47,15 @@ val pp_error : Format.formatter -> error -> unit
 (** {2 Decoding} *)
 
 (** [decode buf] attempts to decode the buffer into an ARP frame [t]. *)
-val decode : Cstruct.t -> (t, error) result
+val decode : Bytes.t -> (t, error) result
 
 (** {2 Encoding} *)
 
 (** [encode t] is a [buf], a freshly allocated buffer, which contains the
     encoded ARP frame [t]. *)
-val encode : t -> Cstruct.t
+val encode : t -> Bytes.t
 
 (** [encode_into t buf] encodes [t] into the buffer [buf] at offset 0.
 
     @raise Invalid_argument if the buffer [buf] is too small (below 28 bytes). *)
-val encode_into : t -> Cstruct.t -> unit
+val encode_into : t -> Bytes.t -> unit

@@ -27,7 +27,7 @@ module type S = sig
   val remove_ip : t -> Ipaddr.V4.t -> unit Lwt.t
   val add_ip : t -> Ipaddr.V4.t -> unit Lwt.t
   val query : t -> Ipaddr.V4.t -> (Macaddr.t, error) result Lwt.t
-  val input : t -> Cstruct.t -> unit Lwt.t
+  val input : t -> Bytes.t -> unit Lwt.t
 end
 
 open Lwt.Infix

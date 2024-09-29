@@ -1,13 +1,13 @@
 let generate n =
-  let data = Cstruct.create n in
+  let data = Bytes.create n in
   for i = 0 to pred n do
-    Cstruct.set_uint8 data i (Random.int 256)
+    Bytes.set_uint8 data i (Random.int 256)
   done;
   data
 
 let rec gen_ip () =
   let buf = generate 4 in
-  let ip = Ipaddr.V4.of_octets_exn (Cstruct.to_string buf) in
+  let ip = Ipaddr.V4.of_octets_exn (Bytes.to_string buf) in
   if ip = Ipaddr.V4.any || ip = Ipaddr.V4.broadcast then
     gen_ip ()
   else
@@ -15,29 +15,29 @@ let rec gen_ip () =
 
 let rec gen_mac () =
   let buf = generate 6 in
-  let mac = Macaddr.of_octets_exn (Cstruct.to_string buf) in
+  let mac = Macaddr.of_octets_exn (Bytes.to_string buf) in
   if mac = Macaddr.broadcast then
     gen_mac ()
   else
     buf, mac
 
 let hdr =
-  let buf = Cstruct.create 6 in
-  Cstruct.BE.set_uint16 buf 0 1 ;
-  Cstruct.BE.set_uint16 buf 2 0x0800 ;
-  Cstruct.set_uint8 buf 4 6 ;
-  Cstruct.set_uint8 buf 5 4 ;
+  let buf = Bytes.create 6 in
+  Bytes.set_uint16_be buf 0 1 ;
+  Bytes.set_uint16_be buf 2 0x0800 ;
+  Bytes.set_uint8 buf 4 6 ;
+  Bytes.set_uint8 buf 5 4 ;
   buf
 
 let gen_int () =
   let buf = generate 1 in
-  (buf, Cstruct.get_uint8 buf 0)
+  (buf, Bytes.get_uint8 buf 0)
 
 let gen_op () =
   let _, op = gen_int () in
-  let buf = Cstruct.create 2 in
+  let buf = Bytes.create 2 in
   let op = 1 + op mod 2 in
-  Cstruct.BE.set_uint16 buf 0 op ;
+  Bytes.set_uint16_be buf 0 op ;
   (if op = 1 then Arp_packet.Request else Arp_packet.Reply), buf
 
 let gen_arp () =
@@ -48,7 +48,7 @@ let gen_arp () =
   and op, opb = gen_op ()
   in
   { Arp_packet.operation = op ; source_mac ; source_ip ; target_mac ; target_ip },
-  Cstruct.concat [ hdr ; opb ; sm ; si ; tm ; ti ]
+  Bytes.concat Bytes.empty [ hdr ; opb ; sm ; si ; tm ; ti ]
 
 let p =
   let module M = struct
@@ -68,14 +68,14 @@ module Coding = struct
   let gen_op_arp () =
     let rec gen_op () =
       let buf = generate 2 in
-      match Cstruct.BE.get_uint16 buf 0 with
+      match Bytes.get_uint16_be buf 0 with
       | 1 | 2 -> gen_op ()
       | x -> (x, buf)
     in
     let data = generate 20
     and o, opb = gen_op ()
     in
-    o, Cstruct.concat [ hdr ; opb ; data ]
+    o, Bytes.concat Bytes.empty [ hdr ; opb ; data ]
 
   let rec gen_unhandled_arp () =
     (* some consistency -- hlen and plen *)
@@ -91,13 +91,13 @@ module Coding = struct
     let hl, hlen = i_min 6 ()
     and pl, plen = i_min 4 ()
     in
-    let my_hdr = Cstruct.concat [ htype ; ptype ; hl ; pl ] in
-    if Cstruct.equal my_hdr hdr then
+    let my_hdr = Bytes.concat Bytes.empty [ htype ; ptype ; hl ; pl ] in
+    if Bytes.equal my_hdr hdr then
       gen_unhandled_arp ()
     else
       let rec gen_op () =
         let buf = generate 2 in
-        match Cstruct.BE.get_uint16 buf 0 with
+        match Bytes.get_uint16_be buf 0 with
         | 1 | 2 -> gen_op ()
         | _ -> buf
       in
@@ -107,7 +107,7 @@ module Coding = struct
       and spa = generate plen
       and tpa = generate plen
       in
-      Cstruct.concat [ my_hdr ; op ; sha ; spa ; tha ; tpa ]
+      Bytes.concat Bytes.empty [ my_hdr ; op ; sha ; spa ; tha ; tpa ]
 
   let gen_short_arp () =
     let _, l = gen_int () in
@@ -154,23 +154,23 @@ module Coding = struct
   let dec_enc () =
     let pkt, buf = gen_arp () in
     let cbuf = Arp_packet.encode pkt in
-    Alcotest.(check bool "encoding produces same buffer" true (Cstruct.equal buf cbuf)) ;
+    Alcotest.(check bool "encoding produces same buffer" true (Bytes.equal buf cbuf)) ;
     match Arp_packet.decode buf with
     | Error _ -> Alcotest.fail "decoding failed, should not happen"
     | Ok pack ->
       Alcotest.(check p "decoding worked" pkt pack) ;
       let cbuf = Arp_packet.encode pack in
-      Alcotest.(check bool "encoding produces same buffer" true (Cstruct.equal buf cbuf))
+      Alcotest.(check bool "encoding produces same buffer" true (Bytes.equal buf cbuf))
 
   let enc_into () =
     let pkt, buf = gen_arp () in
-    let cbuf = Cstruct.create 28 in
+    let cbuf = Bytes.create 28 in
     Arp_packet.encode_into pkt cbuf ;
-    Alcotest.(check bool "encode_into works" true (Cstruct.equal cbuf buf))
+    Alcotest.(check bool "encode_into works" true (Bytes.equal cbuf buf))
 
   let enc_fail () =
     for i = 0 to 27 do
-      let buf = Cstruct.create i
+      let buf = Bytes.create i
       and pkg, _ = gen_arp ()
       in
       Alcotest.check_raises "buffer is too small" (Invalid_argument "too small")
@@ -191,7 +191,7 @@ end
 
 module Handling = struct
   let garp_of ip mac =
-    let mac0 = Macaddr.of_octets_exn (Cstruct.to_string (Cstruct.create 6)) in
+    let mac0 = Macaddr.of_octets_exn "\000\000\000\000\000\000" in
     { Arp_packet.operation = Arp_packet.Request ;
       source_ip = ip ; target_ip = ip ;
       source_mac = mac ; target_mac = mac0 }
@@ -232,7 +232,7 @@ module Handling = struct
       | Some garp -> garp
     in
     Alcotest.(check bool "create has good GARP" true
-                (Cstruct.equal (Arp_packet.encode (garp_of ipaddr mac))
+                (Bytes.equal (Arp_packet.encode (garp_of ipaddr mac))
                    (Arp_packet.encode (fst garp)))) ;
     Alcotest.(check (list i) "ip is sensible" [ipaddr] (Arp_handler.ips t)) ;
     Alcotest.(check (option m) "own entry is in cache"
